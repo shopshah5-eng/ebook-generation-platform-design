@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-bg: #070B14;
+  --color-brand-white: #FFFFFF;
+  --color-brand-black: #0E131F;
+  --color-brand-muted: #94A3B8;
+  --color-brand-purple: #7C3AED;
+  --color-brand-success: #10B981;
+  --color-brand-border: rgba(255, 255, 255, 0.08);
+
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Inter", sans-serif;
+}
+
+:root {
+  --bg: #070B14;
+  --ink: #FFFFFF;
+  --ink-2: #F1F5F9;
+  --muted: #94A3B8;
+  --purple: #7C3AED;
+  --line: rgba(255, 255, 255, 0.08);
+}
+
+body {
+  background-color: #070B14;
+  color: #FFFFFF;
+  font-family: "Inter", sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Inter", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Custom premium transitions & components */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.soft-glow {
+  box-shadow: 0 0 40px rgba(124, 58, 237, 0.15);
+}
+
+.card-glow {
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Floating book stack animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(1deg); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #070B14;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7C3AED;
+}
