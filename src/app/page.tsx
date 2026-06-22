@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "../lib/supabase/client";
 
 // Import layout components
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Container } from "@/components/ui/Container";
 
 // Import landing sections
@@ -20,412 +20,62 @@ import { Templates } from "@/components/sections/Templates";
 import { Testimonials } from "@/components/sections/Testimonials";
 import { Pricing } from "@/components/sections/Pricing";
 import { FAQ } from "@/components/sections/FAQ";
-
-// Import dashboard views
-import { DashboardHome } from "@/components/sections/DashboardHome";
-import CreationWizard from "@/components/wizard/CreationWizard";
-import EditorWorkspace from "@/components/editor/EditorWorkspace";
-import { BillingPanel } from "@/components/sections/BillingPanel";
-import { SettingsPanel } from "@/components/sections/SettingsPanel";
-import FirstUserOnboarding from "@/components/wizard/FirstUserOnboarding";
-import ActivationChecklist from "@/components/layout/ActivationChecklist";
 import PaywallModal from "@/components/ui/PaywallModal";
 
-export type ViewState = "landing" | "dashboard" | "billing" | "settings" | "ebooks" | "templates" | "onboarding";
-
 export default function Home() {
-  const [view, setView] = useState<ViewState>("landing");
-  const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
-
-  // Subscription and Paywall states
+  const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [paywallReason] = useState("");
-  
-  // User profile states
-  const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState("");
-  const [userId, setUserId] = useState("");
 
-  // Ebooks list
-  const [ebooks, setEbooks] = useState<any[]>([]);
-  const [selectedEbook, setSelectedEbook] = useState<any>(null);
-  const [wizardActive, setWizardActive] = useState(false);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
-
-  // Load user session and ebooks list
+  // Check session on load and redirect if authenticated
   useEffect(() => {
     const supabase = createClient();
-
     const checkSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "Creator";
-        setUserName(name.charAt(0).toUpperCase() + name.slice(1));
-        setUserEmail(user.email || "");
-        setUserId(user.id);
-        setView("dashboard");
-        loadEbooks(user.id);
+        router.push("/dashboard");
+      } else {
+        setCheckingSession(false);
       }
     };
-
     checkSession();
-  }, []);
+  }, [router]);
 
-  const loadEbooks = async (uid: string) => {
-    const supabase = createClient();
-    try {
-      const { data, error } = await supabase
-        .from("ebooks")
-        .select("*")
-        .eq("user_id", uid)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      
-      // Map database schema "content" to "pages"
-      const mapped = (data || []).map((b) => ({
-        id: b.id,
-        title: b.title,
-        author: (b as any).author || "Creator",
-        theme: b.template_name || "Startup",
-        pages: Array.isArray(b.content) ? b.content : [],
-        created_at: b.created_at,
-      }));
-      
-      setEbooks(mapped);
-
-      // Trigger onboarding for brand new users
-      if (mapped.length === 0) {
-        setView("onboarding");
-      }
-    } catch (err) {
-      console.error("Failed to load ebooks:", err);
-    }
+  const handleSignUpRedirect = () => {
+    router.push("/signup");
   };
 
-  const handleAuthSuccess = (name: string) => {
-    setUserName(name);
-    setAuthMode(null);
-    setView("dashboard");
-    
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUserEmail(user.email || "");
-        setUserId(user.id);
-        loadEbooks(user.id);
-      }
-    });
-  };
-
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    setUserName("");
-    setUserEmail("");
-    setUserId("");
-    setEbooks([]);
-    setView("landing");
-  };
-
-  // Ebook CRUD Actions
-  const handleGenerate = async (wizardData: {
-    prompt: string;
-    author: string;
-    pageCount: number;
-    style: string;
-    audience: string;
-  }) => {
-    setWizardActive(false);
-
-    try {
-      const response = await fetch("/api/generate-ebook", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: wizardData.prompt,
-          templateName: wizardData.style,
-          author: wizardData.author,
-          pageCount: wizardData.pageCount,
-        }),
-      });
-
-      const responseData = await response.json();
-      if (!response.ok) {
-        throw new Error(responseData.error || "Failed to generate ebook");
-      }
-
-      // Refresh list
-      await loadEbooks(userId);
-
-      // Open new book in Editor
-      const generatedTemplate = {
-        id: responseData.ebookId,
-        title: responseData.title,
-        author: wizardData.author,
-        theme: responseData.theme || wizardData.style,
-        pages: responseData.pages || [],
-      };
-
-      setSelectedEbook(generatedTemplate);
-    } catch (err: any) {
-      alert(err.message || "An error occurred while generating the ebook.");
-    }
-  };
-
-  const handleSaveEbook = async (updatedBook: any) => {
-    // Set edit milestone on save action
-    try {
-      localStorage.setItem("pagenest_checklist_edit", "true");
-    } catch {}
-
-    const supabase = createClient();
-    try {
-      const { error } = await supabase
-        .from("ebooks")
-        .update({
-          title: updatedBook.title,
-          content: updatedBook.pages,
-        })
-        .eq("id", updatedBook.id);
-
-      if (error) throw error;
-      
-      // Update local state
-      setEbooks((prev) => prev.map((b) => (b.id === updatedBook.id ? updatedBook : b)));
-    } catch (err) {
-      console.error("Failed to save ebook to Supabase:", err);
-    }
-  };
-
-  const handleDuplicate = async (bookId: string) => {
-    const bookToDuplicate = ebooks.find((b) => b.id === bookId);
-    if (!bookToDuplicate) return;
-
-    const supabase = createClient();
-    try {
-      const newId = crypto.randomUUID();
-      const { error } = await supabase
-        .from("ebooks")
-        .insert({
-          id: newId,
-          user_id: userId,
-          title: `${bookToDuplicate.title} (Copy)`,
-          template_name: bookToDuplicate.theme,
-          content: bookToDuplicate.pages,
-          created_at: new Date().toISOString(),
-        });
-
-      if (error) throw error;
-      await loadEbooks(userId);
-      alert("Ebook duplicated successfully!");
-    } catch (err) {
-      console.error("Duplicate failed:", err);
-    }
-  };
-
-  const handleDelete = async (bookId: string) => {
-    if (!confirm("Are you sure you want to permanently delete this ebook?")) return;
-
-    const supabase = createClient();
-    try {
-      const { error } = await supabase.from("ebooks").delete().eq("id", bookId);
-      if (error) throw error;
-      setEbooks((prev) => prev.filter((b) => b.id !== bookId));
-    } catch (err) {
-      console.error("Delete failed:", err);
-    }
-  };
-
-  const handleExport = (book: any, format: string) => {
-    alert(`Initiating ${format} export generator pipeline for "${book.title}"`);
-  };
-
-  const handleSettingsUpdate = (data: { name: string; email: string }) => {
-    setUserName(data.name);
-    setUserEmail(data.email);
-  };
-
-  const handleDeleteAccount = async () => {
-    alert("Account deletion request logged. Redirecting to auth center.");
-    handleLogout();
-  };
-
-  const handleCreateNewEbook = () => {
-    // TODO: Restore subscription gating limit checks here later
-    /*
-    if (planId === "plan_free" && ebooks.length >= 1) {
-      setPaywallReason("Free accounts are limited to 1 ebook creation. Upgrade to Pro to create up to 50 ebooks with priority generation.");
-      setPaywallOpen(true);
-      return;
-    }
-    if (planId === "plan_pro" && ebooks.length >= 50) {
-      setPaywallReason("Pro accounts are limited to 50 ebooks. Upgrade to Agency for unlimited creations, brand kits, and workspaces.");
-      setPaywallOpen(true);
-      return;
-    }
-    */
-
-    if (ebooks.length === 0) {
-      setView("onboarding");
-    } else {
-      setWizardActive(true);
-    }
-  };
-
-  // View routing stage
-  if (selectedEbook) {
+  if (checkingSession) {
     return (
-      <EditorWorkspace
-        ebook={selectedEbook}
-        onClose={() => {
-          setSelectedEbook(null);
-          loadEbooks(userId);
-        }}
-        onSave={handleSaveEbook}
-      />
+      <div className="min-h-screen bg-[#070B14] text-white flex items-center justify-center font-sans">
+        <p className="text-xs text-brand-muted animate-pulse">Checking credentials...</p>
+      </div>
     );
   }
 
-  // Onboarding full-screen experience
-  if (view === "onboarding") {
-    return (
-      <FirstUserOnboarding
-        userName={userName}
-        onComplete={async (generatedBook) => {
-          setSelectedEbook(generatedBook);
-          setView("dashboard");
-          await loadEbooks(userId);
-        }}
-        onClose={() => {
-          setView("dashboard");
-        }}
-      />
-    );
-  }
-
-  // Render Dashboard Stage Layout if view is app-centric
-  if (view !== "landing") {
-    return (
-      <>
-        <AppLayout
-          activeView={view}
-          onViewChange={(v) => {
-            setView(v as ViewState);
-            if (v === "templates") {
-              try {
-                localStorage.setItem("pagenest_checklist_templates", "true");
-              } catch {}
-            }
-          }}
-          userName={userName}
-          onLogout={handleLogout}
-          onCreateTrigger={handleCreateNewEbook}
-        >
-          {view === "dashboard" && (
-            <DashboardHome
-              userName={userName}
-              ebooks={ebooks}
-              onCreateTrigger={handleCreateNewEbook}
-              onEdit={setSelectedEbook}
-              onDuplicate={handleDuplicate}
-              onDelete={handleDelete}
-              onExport={handleExport}
-            />
-          )}
-          {view === "ebooks" && (
-            <DashboardHome
-              userName={userName}
-              ebooks={ebooks}
-              onCreateTrigger={handleCreateNewEbook}
-              onEdit={setSelectedEbook}
-              onDuplicate={handleDuplicate}
-              onDelete={handleDelete}
-              onExport={handleExport}
-            />
-          )}
-          {view === "templates" && (
-            <div className="flex flex-col gap-6">
-              <h2 className="text-xl font-bold text-white">Ebook Theme Library</h2>
-              <Templates onSelectTemplate={(tpl) => {
-                // TODO: Restore premium template gating check here later
-                /*
-                const isPremium = ["Startup", "Finance", "Marketing", "Business"].includes(tpl.theme);
-                if (planId === "plan_free" && isPremium) {
-                  setPaywallReason(`The "${tpl.title}" template is a premium feature. Upgrade to Pro to access our entire library of layouts.`);
-                  setPaywallOpen(true);
-                  return;
-                }
-                */
-                setSelectedEbook({
-                  id: crypto.randomUUID(),
-                  title: `My ${tpl.title}`,
-                  author: userName,
-                  theme: tpl.theme,
-                  pages: [
-                    { type: "cover", title: `My ${tpl.title}`, subtitle: "First Edition" }
-                  ],
-                });
-              }} />
-            </div>
-          )}
-          {view === "billing" && (
-            <BillingPanel ebookCount={ebooks.length} />
-          )}
-          {view === "settings" && (
-            <SettingsPanel
-              userName={userName}
-              userEmail={userEmail}
-              onUpdate={handleSettingsUpdate}
-              onDeleteAccount={handleDeleteAccount}
-            />
-          )}
-
-          {wizardActive && (
-            <CreationWizard
-              onClose={() => setWizardActive(false)}
-              onGenerate={handleGenerate}
-              userName={userName}
-            />
-          )}
-        </AppLayout>
-        <ActivationChecklist />
-        <PaywallModal
-          isOpen={paywallOpen}
-          onClose={() => setPaywallOpen(false)}
-          reason={paywallReason}
-        />
-      </>
-    );
-  }
-
-  // Otherwise render standard Landing Page
+  // Render standard Landing Page
   return (
     <main className="pn-app-shell bg-brand-bg min-h-screen">
       <Navbar
-        authMode={authMode}
-        setAuthMode={setAuthMode}
-        userName={userName}
-        onAuth={handleAuthSuccess}
-        onLogout={handleLogout}
-        onViewDashboard={() => setView("dashboard")}
+        authMode={null}
+        userName=""
       />
       <Hero
-        onCreate={() => setAuthMode("signup")}
+        onCreate={handleSignUpRedirect}
       />
       <SocialProof />
       <HowItWorks />
       <Showcase />
       <BeforeAfter />
       <Features />
-      <Templates onSelectTemplate={() => setAuthMode("signup")} />
+      <Templates onSelectTemplate={handleSignUpRedirect} />
       <Testimonials />
       <Pricing
         billing={billingPeriod}
         setBilling={setBillingPeriod}
-        onStart={() => setAuthMode("signup")}
+        onStart={handleSignUpRedirect}
       />
       <FAQ />
 
@@ -440,7 +90,7 @@ export default function Home() {
             Generate, edit and export professional ebooks in minutes. Start creating and scaling your digital audience today.
           </p>
           <button
-            onClick={() => setAuthMode("signup")}
+            onClick={handleSignUpRedirect}
             className="px-8 py-4 rounded-full bg-brand-purple hover:bg-brand-purple/90 text-white font-sans text-sm font-bold transition-all shadow-[0_0_20px_rgba(124,58,237,0.4)] flex items-center justify-center gap-2 group cursor-pointer mt-4"
           >
             <span>Start Creating Free</span>

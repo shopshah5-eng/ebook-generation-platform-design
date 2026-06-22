@@ -10,8 +10,27 @@ const ai = new GoogleGenAI({
 
 function buildSystemPrompt(
   pageCount: number,
-  author?: string
+  author?: string,
+  audience?: string,
+  tone?: string,
+  outline?: { title: string; description?: string }[]
 ): string {
+  let outlineSection = "";
+  if (outline && outline.length > 0) {
+    outlineSection = `
+The user has specified a custom outline of chapters. You MUST structure the ebook around this outline:
+${outline.map((ch, i) => `Chapter ${i + 1}: "${ch.title}" - ${ch.description || ""}`).join("\n")}
+
+You MUST allocate the chapters across the pages. Ensure each chapter has:
+- A chapter divider page (type: "chapter").
+- Followed by 1 or more content/visual/checklist pages representing that chapter's material.
+Do not invent chapters outside of the outline; follow it in exact sequence.
+`;
+  }
+
+  const audienceStr = audience ? `Target Audience: ${audience}` : "";
+  const toneStr = tone ? `Tone of Writing: ${tone}` : "";
+
   return `
 You are a professional ebook author.
 
@@ -26,6 +45,10 @@ CRITICAL CONTENT DENSITY & LENGTH REQUIREMENTS:
 - Follow the required schema for each page type exactly.
 - Professional quality writing.
 - No markdown, no code fences, no explanations.
+
+${audienceStr}
+${toneStr}
+${outlineSection}
 
 Author:
 ${author || "PageNest Editorial"}
@@ -165,7 +188,10 @@ export async function generateEbookContent(
   prompt: string,
   templateName: string,
   author?: string,
-  pageCount = 6
+  pageCount = 6,
+  audience?: string,
+  tone?: string,
+  outline?: { title: string; description?: string }[]
 ) {
   let lastError: any = null;
   const maxAttempts = 3;
@@ -206,7 +232,10 @@ ${pageCount}
             systemInstruction:
               buildSystemPrompt(
                 pageCount,
-                author
+                author,
+                audience,
+                tone,
+                outline
               ),
           },
         })
@@ -330,6 +359,71 @@ ${instruction}
       error
     );
 
+    throw error;
+  }
+}
+
+export async function generateEbookOutline(
+  prompt: string,
+  title: string,
+  audience: string,
+  tone: string,
+  pageCount: number
+) {
+  try {
+    const response = await generateWithTimeout(
+      ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `
+Create a structured chapter outline for a professional ebook.
+Title: ${title}
+Concept: ${prompt}
+Audience: ${audience}
+Tone: ${tone}
+Total Page Target: ${pageCount} pages.
+
+Output MUST be a JSON array of chapter objects. Each chapter must have:
+- "title": Clean, professional chapter title.
+- "description": A concise 1-2 sentence description explaining what this chapter will cover.
+
+Determine the number of chapters naturally matching a ${pageCount}-page volume (typically 3 to 7 chapters).
+Return ONLY the JSON array. Do not include markdown code blocks, do not wrap in \`\`\`json.
+`,
+              },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+          systemInstruction: "You are an expert ebook outline planner. Return ONLY a valid JSON array of chapter objects conforming to the schema. No explanations, no markdown fences.",
+        },
+      })
+    );
+
+    const text = (response as any).text?.trim();
+    if (!text) {
+      throw new Error("Empty outline response from Gemini");
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("Failed to parse outline JSON");
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("Gemini returned invalid outline structure");
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error("generateEbookOutline error:", error);
     throw error;
   }
 }

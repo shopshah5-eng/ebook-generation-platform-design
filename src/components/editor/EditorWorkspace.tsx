@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import FloatingAiToolbar from "./FloatingAiToolbar";
 import CoverEditorPanel from "./CoverEditorPanel";
@@ -157,6 +157,39 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
   const [editedEbook, setEditedEbook] = useState<Ebook>(initializedEbook);
   const [activePageIndex, setActivePageIndex] = useState(0);
   
+  const lastSavedRef = useRef<string>(JSON.stringify(initializedEbook));
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+
+  useEffect(() => {
+    const currentStr = JSON.stringify(editedEbook);
+    if (currentStr === lastSavedRef.current) {
+      setSaveStatus("saved");
+      return;
+    }
+
+    setSaveStatus("unsaved");
+    const timer = setTimeout(async () => {
+      setSaveStatus("saving");
+      try {
+        await onSave(editedEbook);
+        lastSavedRef.current = currentStr;
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+        setSaveStatus("unsaved");
+      }
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [editedEbook, onSave]);
+
+  const handleClose = () => {
+    if (JSON.stringify(editedEbook) !== lastSavedRef.current) {
+      onSave(editedEbook);
+    }
+    onClose();
+  };
+  
   // Subscription and Paywall states
   /*
   const { planId } = useSubscription();
@@ -201,6 +234,8 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState("");
   const [isExportSheetOpen, setIsExportSheetOpen] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState<string | null>(null);
 
   const activePage = useMemo(() => {
     return editedEbook.pages[activePageIndex] || editedEbook.pages[0] || { type: "chapter", title: "New Page", content: "" };
@@ -279,14 +314,12 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     const updatedBook = { ...editedEbook, pages: updatedPages };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
   };
 
   const handleTitleChange = (val: string) => {
     const updatedBook = { ...editedEbook, title: val };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
   };
 
   const handleAddPage = () => {
@@ -323,7 +356,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
     setActivePageIndex(updatedBook.pages.length - 1);
   };
 
@@ -338,7 +370,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     const updatedBook = { ...editedEbook, pages: updatedPages };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
     setActivePageIndex(index + 1);
   };
 
@@ -349,7 +380,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     const updatedBook = { ...editedEbook, pages: updatedPages };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
     setActivePageIndex(Math.max(0, index - 1));
   };
 
@@ -366,7 +396,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     const updatedBook = { ...editedEbook, pages: updatedPages };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
     setActivePageIndex(swapIndex);
   };
 
@@ -374,7 +403,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     const updatedBook = { ...editedEbook, pages: newPages };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
 
     const activePageId = editedEbook.pages[activePageIndex]?.id;
     if (activePageId) {
@@ -644,7 +672,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
         };
         setEditedEbook(updatedBook);
         updateHistory(updatedBook);
-        onSave(updatedBook);
         setActivePageIndex(updatedBook.pages.length - 1);
         setChapterPrompt("");
       }
@@ -673,84 +700,90 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     };
     setEditedEbook(updatedBook);
     updateHistory(updatedBook);
-    onSave(updatedBook);
     alert("Brand Kit applied globally! All page typography matches the presets.");
   };
 
   // AI Text selection rewrite triggers
-  const handleAiWritingAction = (actionId: string, selectedText: string) => {
+  const handleAiWritingAction = async (actionId: string, selectedText: string) => {
     let actionDesc = "AI is writing...";
+    let editInstruction = "";
     switch (actionId) {
-      case "improve": actionDesc = "Improving text style..."; break;
-      case "expand": actionDesc = "Expanding ideas..."; break;
-      case "shorten": actionDesc = "Shortening paragraphs..."; break;
-      case "rewrite": actionDesc = "Translating professionally..."; break;
-      case "persuasive": actionDesc = "Adding persuasive hooks..."; break;
-      case "bullets": actionDesc = "Summarizing to bullets..."; break;
-      case "summary": actionDesc = "Drafting brief summary..."; break;
-      case "cta": actionDesc = "Creating call-to-actions..."; break;
-      case "casestudy": actionDesc = "Structuring case study..."; break;
+      case "improve":
+        actionDesc = "Improving text style...";
+        editInstruction = "Improve the writing style, grammar, and engagement of the selected text.";
+        break;
+      case "expand":
+        actionDesc = "Expanding ideas...";
+        editInstruction = "Expand on the concepts mentioned in the selected text, providing more detail and depth.";
+        break;
+      case "shorten":
+        actionDesc = "Shortening paragraphs...";
+        editInstruction = "Shorten the selected text to be concise and direct while preserving the main message.";
+        break;
+      case "rewrite":
+        actionDesc = "Translating professionally...";
+        editInstruction = "Rewrite the selected text to sound highly professional, formal, and authoritative.";
+        break;
+      case "persuasive":
+        actionDesc = "Adding persuasive hooks...";
+        editInstruction = "Rewrite the selected text to be highly persuasive, engaging, and compelling for readers.";
+        break;
+      case "bullets":
+        actionDesc = "Summarizing to bullets...";
+        editInstruction = "Summarize the selected text into a clear bulleted list.";
+        break;
+      case "summary":
+        actionDesc = "Drafting brief summary...";
+        editInstruction = "Summarize the selected text in a single concise paragraph.";
+        break;
+      case "cta":
+        actionDesc = "Creating call-to-actions...";
+        editInstruction = "Rewrite the selected text to include a strong call-to-action.";
+        break;
+      case "casestudy":
+        actionDesc = "Structuring case study...";
+        editInstruction = "Format the selected text into a case study layout (Challenge, Solution, Result).";
+        break;
+      default:
+        editInstruction = `Modify the selected text: "${selectedText}"`;
     }
 
     setAiWritingStatus(actionDesc);
 
-    setTimeout(() => {
-      let rewrittenText = selectedText;
-      switch (actionId) {
-        case "improve":
-          rewrittenText = `${selectedText} (polished for maximum engagement, clarity, and grammatical precision).`;
-          break;
-        case "expand":
-          rewrittenText = `${selectedText} By diving deeper into these core parameters, we uncover primary drivers that affect long-term growth and outline actionable metrics to safeguard project success.`;
-          break;
-        case "shorten":
-          rewrittenText = `${selectedText.substring(0, Math.floor(selectedText.length * 0.6))}... (concised by AI).`;
-          break;
-        case "rewrite":
-          rewrittenText = `Professionally formulated: "Our primary objective is to execute strategic alignments across all operating segments to ensure maximum capital efficiency."`;
-          break;
-        case "persuasive":
-          rewrittenText = `🔥 Don't let operational bloat limit your growth. Adopt this framework today and unlock a 50% increase in team velocity in under two weeks!`;
-          break;
-        case "bullets":
-          rewrittenText = `• Focus on core metrics\n• Standardize user validation loops\n• Drive async alignment protocols`;
-          break;
-        case "summary":
-          rewrittenText = `Summary: A highly structured approach prioritizing MVP feedback loops and async transparency.`;
-          break;
-        case "cta":
-          rewrittenText = `🚀 Start building today: click the link to claim your free consulting toolkit!`;
-          break;
-        case "casestudy":
-          rewrittenText = `📊 CHALLENGE: 70% planning lag. SOLUTION: Linear task boards. RESULT: Double shipping velocity in 30 days.`;
-          break;
+    try {
+      const res = await fetch("/api/regenerate-chapter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          page: activePage,
+          instruction: editInstruction,
+          selectedText,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
       }
 
-      // Replace in active page content or block content
-      if (activePage.type !== "cover" && activePage.type !== "toc" && activePage.blocks) {
-        const updatedBlocks = activePage.blocks.map((b) => {
-          if (b.type === "paragraph" && b.content?.includes(selectedText)) {
-            return { ...b, content: b.content.replace(selectedText, rewrittenText) };
-          }
-          if (b.type === "quote" && b.content?.includes(selectedText)) {
-            return { ...b, content: b.content.replace(selectedText, rewrittenText) };
-          }
-          return b;
-        });
-        handlePagePropertyChange("blocks", updatedBlocks);
+      const data = await res.json();
+      if (data.success && data.updatedPage) {
+        const updatedPages = [...editedEbook.pages];
+        updatedPages[activePageIndex] = {
+          ...updatedPages[activePageIndex],
+          ...data.updatedPage,
+        };
+        const updatedBook = { ...editedEbook, pages: updatedPages };
+        setEditedEbook(updatedBook);
+        updateHistory(updatedBook);
       } else {
-        // Fallback for cover subtitle or page content
-        if (activePage.content && activePage.content.includes(selectedText)) {
-          handlePagePropertyChange("content", activePage.content.replace(selectedText, rewrittenText));
-        } else if (activePage.text && activePage.text.includes(selectedText)) {
-          handlePagePropertyChange("text", activePage.text.replace(selectedText, rewrittenText));
-        } else if (activePage.subtitle && activePage.subtitle.includes(selectedText)) {
-          handlePagePropertyChange("subtitle", activePage.subtitle.replace(selectedText, rewrittenText));
-        }
+        alert(data.error || "Failed to regenerate content with AI");
       }
-
+    } catch (err: any) {
+      console.error("AI action failed:", err);
+      alert("AI content regeneration failed. Please try again.");
+    } finally {
       setAiWritingStatus(null);
-    }, 1800);
+    }
   };
 
   // Export experience calculator
@@ -781,42 +814,59 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
     return (baseSize + pageCount * pageMultiplier).toFixed(1);
   }, [editedEbook.pages.length]);
 
-  const triggerExport = (type: string) => {
-    // TODO: Restore export format check here later
-    /*
-    if (planId === "plan_free" && ["EPUB", "DOCX", "Kindle"].includes(type)) {
-      setPaywallReason(`Exporting as ${type} is a Pro feature. Upgrade to Pro to compile print-ready EPUB, DOCX, and Kindle books.`);
-      setPaywallOpen(true);
-      return;
-    }
-    */
-
+  const triggerExport = async (type: string) => {
     setExportType(type);
     setExportProgress(10);
-    setExportStatus("Analyzing page layouts...");
+    setExportStatus("Requesting download token...");
+    setDownloadUrl(null);
+    setDownloadFileName(null);
 
-    const steps = [
-      { progress: 35, status: "Compiling font family pairs..." },
-      { progress: 65, status: "Optimizing vector block shapes..." },
-      { progress: 85, status: "Embedding brand kit colors..." },
-      { progress: 100, status: "Ebook compiled successfully!" },
-    ];
+    try {
+      // Step 1: Request a download token from /api/download
+      setExportProgress(30);
+      setExportStatus("Validating ebook credentials...");
+      const tokenRes = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ebookId: editedEbook.id,
+          format: type.toLowerCase(),
+        }),
+      });
 
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < steps.length) {
-        setExportProgress(steps[currentStep].progress);
-        setExportStatus(steps[currentStep].status);
-        if (steps[currentStep].progress === 100) {
-          try {
-            localStorage.setItem("pagenest_checklist_export", "true");
-          } catch {}
-        }
-        currentStep++;
-      } else {
-        clearInterval(interval);
+      if (!tokenRes.ok) {
+        const errData = await tokenRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${tokenRes.status}`);
       }
-    }, 800);
+
+      setExportProgress(60);
+      setExportStatus("Compiling document layout...");
+
+      const tokenData = await tokenRes.json();
+      if (!tokenData.success || !tokenData.downloadUrl) {
+        throw new Error("Failed to generate download URL");
+      }
+
+      setExportProgress(90);
+      setExportStatus("Finalizing document render...");
+
+      // Small pause before showing download
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      setExportProgress(100);
+      setExportStatus("Ebook compiled successfully!");
+      setDownloadUrl(tokenData.downloadUrl);
+      setDownloadFileName(tokenData.fileName || `ebook.${type.toLowerCase()}`);
+
+      try {
+        localStorage.setItem("pagenest_checklist_export", "true");
+      } catch {}
+
+    } catch (err: any) {
+      console.error("Export failed:", err);
+      setExportStatus(`Export failed: ${err.message}`);
+      setExportProgress(0);
+    }
   };
 
   // Background style compiler
@@ -862,7 +912,7 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
       <header className="h-16 border-b border-white/5 bg-[#0E131F]/90 px-6 flex items-center justify-between shrink-0 z-40 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-[10px] font-bold text-brand-muted hover:text-white border border-white/5 rounded-full px-4 py-2 hover:bg-white/5 transition-all cursor-pointer uppercase tracking-wider flex items-center gap-1.5"
           >
             <span>&larr;</span>
@@ -885,9 +935,21 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
             )}
           </div>
 
-          <span className="hidden sm:inline-flex text-[9px] text-brand-success font-bold px-2.5 py-1 rounded-full bg-brand-success/15 border border-brand-success/20 uppercase tracking-wide">
-            ● Autosaved
-          </span>
+          {saveStatus === "saved" && (
+            <span className="hidden sm:inline-flex text-[9px] text-brand-success font-bold px-2.5 py-1 rounded-full bg-brand-success/15 border border-brand-success/20 uppercase tracking-wide">
+              ● Autosaved
+            </span>
+          )}
+          {saveStatus === "saving" && (
+            <span className="hidden sm:inline-flex text-[9px] text-amber-500 font-bold px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/20 uppercase tracking-wide animate-pulse">
+              ● Saving...
+            </span>
+          )}
+          {saveStatus === "unsaved" && (
+            <span className="hidden sm:inline-flex text-[9px] text-brand-muted font-bold px-2.5 py-1 rounded-full bg-white/5 border border-white/10 uppercase tracking-wide">
+              ● Unsaved Changes
+            </span>
+          )}
         </div>
 
         {/* Viewport Toggler */}
@@ -2192,7 +2254,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
               const book = { ...editedEbook, pages: updated };
               setEditedEbook(book);
               updateHistory(book);
-              onSave(book);
               alert("Section layout regenerated successfully!");
             }}
             className="w-full text-left px-3 py-2 hover:bg-brand-purple/20 text-brand-purple rounded-lg cursor-pointer font-bold"
@@ -2268,7 +2329,6 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
                         if (history[ver.index]) {
                           setEditedEbook({ ...history[ver.index] });
                           setHistoryIndex(ver.index);
-                          onSave(history[ver.index]);
                           setIsVersionsDrawerOpen(false);
                           alert(`Restored snapshot: ${ver.name}`);
                         } else {
@@ -2421,15 +2481,23 @@ export default function EditorWorkspace({ ebook, onClose, onSave }: EditorWorksp
                       pages: {editedEbook.pages.length} &middot; size: {estimatedSize} MB &middot; read time: {readingTimeMinutes} mins
                     </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      alert(`Downloading: ${editedEbook.title.replace(/\s+/g, "_").toLowerCase()}.${exportType.toLowerCase()}`);
-                      setExportType(null);
-                    }}
-                    className="w-full py-3.5 rounded-full bg-[#10B981] hover:bg-[#10B981]/90 text-[#070B14] font-bold text-[10px] uppercase tracking-widest shadow-md cursor-pointer mt-2"
-                  >
-                    Download Compiled File
-                  </button>
+                  {downloadUrl ? (
+                    <a
+                      href={downloadUrl}
+                      download={downloadFileName || `ebook.${exportType?.toLowerCase()}`}
+                      onClick={() => setTimeout(() => setExportType(null), 800)}
+                      className="w-full py-3.5 rounded-full bg-[#10B981] hover:bg-[#10B981]/90 text-[#070B14] font-bold text-[10px] uppercase tracking-widest shadow-md cursor-pointer mt-2 text-center block"
+                    >
+                      ↓ Download Compiled File
+                    </a>
+                  ) : (
+                    <button
+                      disabled
+                      className="w-full py-3.5 rounded-full bg-white/10 text-white/40 font-bold text-[10px] uppercase tracking-widest mt-2 cursor-not-allowed"
+                    >
+                      Preparing download...
+                    </button>
+                  )}
                   <button
                     onClick={() => setExportType(null)}
                     className="w-full py-2 text-[10px] text-brand-muted hover:text-white uppercase tracking-wider font-bold"

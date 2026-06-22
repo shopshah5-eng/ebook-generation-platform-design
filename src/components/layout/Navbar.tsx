@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { createClient } from "../../lib/supabase/client";
 import { Container } from "../ui/Container";
 
@@ -29,11 +30,6 @@ export function Navbar({
   onViewDashboard,
 }: NavbarProps) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-
-  const toggleAuth = (mode: Exclude<AuthMode, null>) => {
-    if (setPendingCreate) setPendingCreate(false);
-    setAuthMode?.(authMode === mode ? null : mode);
-  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-brand-border bg-brand-bg/85 backdrop-blur-md px-6 lg:px-16 py-4">
@@ -97,18 +93,18 @@ export function Navbar({
             </div>
           ) : (
             <div className="hidden md:flex items-center gap-4">
-              <button
-                onClick={() => toggleAuth("login")}
+              <Link
+                href="/login"
                 className="font-sans text-xs font-bold text-white hover:text-brand-purple transition-colors cursor-pointer"
               >
                 Log in
-              </button>
-              <button
-                onClick={() => toggleAuth("signup")}
+              </Link>
+              <Link
+                href="/signup"
                 className="px-4 py-2 rounded-full bg-brand-purple hover:bg-brand-purple/90 text-white font-sans text-xs font-bold transition-all hover:scale-102 shadow-[0_0_15px_rgba(124,58,237,0.3)] cursor-pointer"
               >
                 Sign up
-              </button>
+              </Link>
             </div>
           )}
 
@@ -241,24 +237,20 @@ export function Navbar({
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3">
-                    <button
-                      onClick={() => {
-                        setMobileDrawerOpen(false);
-                        toggleAuth("login");
-                      }}
-                      className="w-full py-3 rounded-full border border-white/10 hover:border-white/20 text-white font-sans text-xs font-bold transition-colors cursor-pointer"
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileDrawerOpen(false)}
+                      className="w-full py-3 text-center rounded-full border border-white/10 hover:border-white/20 text-white font-sans text-xs font-bold transition-colors cursor-pointer block"
                     >
                       Log in
-                    </button>
-                    <button
-                      onClick={() => {
-                        setMobileDrawerOpen(false);
-                        toggleAuth("signup");
-                      }}
-                      className="w-full py-3 rounded-full bg-brand-purple hover:bg-brand-purple/90 text-white font-sans text-xs font-bold transition-all shadow-[0_0_15px_rgba(124,58,237,0.3)] cursor-pointer"
+                    </Link>
+                    <Link
+                      href="/signup"
+                      onClick={() => setMobileDrawerOpen(false)}
+                      className="w-full py-3 text-center rounded-full bg-brand-purple hover:bg-brand-purple/90 text-white font-sans text-xs font-bold transition-all shadow-[0_0_15px_rgba(124,58,237,0.3)] cursor-pointer block"
                     >
                       Get Started
-                    </button>
+                    </Link>
                   </div>
                 )}
               </div>

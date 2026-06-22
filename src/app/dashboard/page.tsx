@@ -70,6 +70,8 @@ export default function DashboardHomeRoute() {
     pageCount: number;
     style: string;
     audience: string;
+    tone: string;
+    outline: any[];
   }) => {
     setWizardActive(false);
     setGenProgressData(wizardData);
@@ -182,6 +184,8 @@ export default function DashboardHomeRoute() {
           author={genProgressData.author}
           pageCount={genProgressData.pageCount}
           audience={genProgressData.audience}
+          tone={genProgressData.tone}
+          outline={genProgressData.outline}
           onComplete={(generatedBook) => {
             setGenProgressData(null);
             setEditingEbook(generatedBook);

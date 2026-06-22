@@ -56,6 +56,8 @@ export default function TemplatesRoute() {
     pageCount: number;
     style: string;
     audience: string;
+    tone: string;
+    outline: any[];
   }) => {
     setWizardActive(false);
     setGenProgressData(wizardData);
@@ -564,6 +566,8 @@ export default function TemplatesRoute() {
           author={genProgressData.author}
           pageCount={genProgressData.pageCount}
           audience={genProgressData.audience}
+          tone={genProgressData.tone}
+          outline={genProgressData.outline}
           onComplete={(generatedBook) => {
             setGenProgressData(null);
             setEditingEbook(generatedBook);

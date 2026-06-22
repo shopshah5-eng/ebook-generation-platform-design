@@ -64,8 +64,14 @@ export const GenerateEbookInputSchema = z.object({
   .number()
   .int()
   .min(4)
-  .max(20)
+  .max(50)
   .default(8),
+  audience: z.string().optional(),
+  tone: z.string().optional(),
+  outline: z.array(z.object({
+    title: z.string(),
+    description: z.string().optional(),
+  })).optional(),
 });
 
 export const EditPageInputSchema = z.object({
@@ -82,5 +88,5 @@ export const RegenerateImageInputSchema = z.object({
 
 export const DownloadInputSchema = z.object({
   ebookId: z.string().uuid("Invalid ebook ID"),
-  format: z.enum(["pdf", "epub", "html"]),
+  format: z.enum(["pdf", "epub", "docx", "html"]),
 });

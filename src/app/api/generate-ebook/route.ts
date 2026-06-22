@@ -80,6 +80,9 @@ export async function POST(
       templateName,
       author,
       pageCount,
+      audience,
+      tone,
+      outline,
     } = parsed.data;
 
     const rateLimit =
@@ -104,7 +107,10 @@ export async function POST(
         prompt,
         templateName,
         author,
-        pageCount
+        pageCount,
+        audience,
+        tone,
+        outline
       );
 
     for (const page of pages) {

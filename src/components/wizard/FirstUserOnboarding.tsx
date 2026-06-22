@@ -143,6 +143,8 @@ export default function FirstUserOnboarding({
           author={userName || "Creator"}
           pageCount={6}
           audience={finalWho}
+          tone="Professional"
+          outline={[]}
           onComplete={(book) => {
             setGeneratedBook(book);
             // Increment activation checklist localstorage

@@ -45,6 +45,8 @@ interface GenerationProgressProps {
   author: string;
   pageCount: number;
   audience: string;
+  tone: string;
+  outline: any[];
   onComplete: (generatedBook: Ebook) => void;
   onClose: () => void;
 }
@@ -56,6 +58,8 @@ export default function GenerationProgress({
   author,
   pageCount,
   audience,
+  tone,
+  outline,
   onComplete,
   onClose,
 }: GenerationProgressProps) {
@@ -122,6 +126,9 @@ export default function GenerationProgress({
             templateName,
             author,
             pageCount,
+            audience,
+            tone,
+            outline,
           }),
         });
 
